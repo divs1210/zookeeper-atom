@@ -7,7 +7,10 @@
 ;; You must not remove this notice, or any other, from this software.
 
 (ns zookeeper-atom.core
-  (:refer-clojure :rename {atom clj-atom})
+  (:refer-clojure :rename {atom clj-atom
+                           swap! clj-swap!
+                           reset! clj-reset!
+                           compare-and-set! clj-compare-and-set!})
   (require [zookeeper :as zoo]
            [zookeeper.data :as zoo.data]
            [clojure.tools.logging :refer [debug]]
@@ -82,7 +85,7 @@
     (set-value client path value version))
     atom)
 
-(defn swap
+(defn swap!
   "Swap a zookeeper-atom's value with the same semantics as Clojure's swap!.
    Returns the zookeeper-atom's value after swapping."
   [^Atom atom f & args]
@@ -96,10 +99,19 @@
         (recur atom f args))
       result)))
 
-(defn reset
+(defn reset!
   "Reset a zookeeper-atom's value without regard for the value."
   [^Atom atom value]
-  (swap atom (constantly value)))
+  (swap! atom (constantly value)))
+
+(defn compare-and-set!
+  [^Atom atom oldval newval]
+  (loop []
+    (let [{:keys [client path]} atom
+          currval (-> (zoo/data client path) :data decode)]
+      (if (= currval oldval)
+        (reset! atom newval)
+        (recur)))))
 
 (defn data-version
   "Returns the data version of the znode. Mostly useful for debugging."
@@ -118,7 +130,7 @@
           data (-> z-data :data decode)
           version (-> z-data :stat :version)]
       (debug "ZK watch" version "=>" data)
-      (swap! cache assoc :data data :version version)
+      (clj-swap! cache assoc :data data :version version)
       nil)))
 
 (defn atom

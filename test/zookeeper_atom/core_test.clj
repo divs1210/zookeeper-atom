@@ -6,6 +6,9 @@
 ; (use 'clj-logging-config.log4j)
 ; (set-loggers! :root {:level :warn} "zookeeper-atom.core" {:level :debug})
 
+(def zk-server
+  "shiva.local")
+
 (defn- rand-str
   [len]
   (let [letters (range (int \A) (inc (int \Z)))]
@@ -17,7 +20,7 @@
 
 (facts "about race conditions"
   (fact "(heuristic) has correct value after 100 swaps"
-    (let [client (zk/connect "127.0.0.1")
+    (let [client (zk/connect zk-server)
           path (rand-path "swap-100")
           a (zk/atom client path)
           b (zk/atom client path)
@@ -28,8 +31,8 @@
           limit 500
           swapper #(doseq [_ (range limit)]
                     (Thread/sleep %1)
-                    (zk/swap %2 update-in [%3] inc))]
-      (zk/reset a {})
+                    (zk/swap! %2 update-in [%3] inc))]
+      (zk/reset! a {})
       (Thread/sleep 500)
       (let [futures [(future (swapper 5 a :a))
                      (future (swapper 4 b :b))
@@ -44,7 +47,7 @@
       @d => {:a limit, :b limit, :c limit, :d limit, :e limit}
       @e => {:a limit, :b limit, :c limit, :d limit, :e limit}))
   (fact "(heuristic) existing value can be read immediately"
-    (let [client (zk/connect "127.0.0.1")
+    (let [client (zk/connect zk-server)
           path (rand-path "read-immediately")
           _ (zk/atom client path "Are we there, yet?")]
       (doseq [_ (range 100)]
@@ -52,13 +55,13 @@
 
 (facts "about atom function"
   (fact "sets an initial value"
-    (let [client (zk/connect "127.0.0.1")
+    (let [client (zk/connect zk-server)
           path (rand-path "initial")
           a (zk/atom client path "initial")]
       (Thread/sleep 50)
       @a => "initial"))
   (fact "initial value does not overwrite an existing value"
-    (let [client (zk/connect "127.0.0.1")
+    (let [client (zk/connect zk-server)
           path (rand-path "overwrite")
           first (zk/atom client path "init")]
       (fact "'init' value is readable"
@@ -70,14 +73,14 @@
           @second => "init"
           @first => "init")
         (fact "reset updates both atoms' values"
-          (zk/reset second "reset")
+          (zk/reset! second "reset")
           (Thread/sleep 50)
           @first => "reset"
           @second => "reset")))))
 
 (facts "about swap"
   (fact "refuses to encode pattern literals"
-    (let [client (zk/connect "127.0.0.1")
+    (let [client (zk/connect zk-server)
           path (rand-path "patterns")
           a (zk/atom client path)]
-      (zk/reset a #"foo") => (throws #"Can't encode data as EDN"))))
+      (zk/reset! a #"foo") => (throws #"Can't encode data as EDN"))))
